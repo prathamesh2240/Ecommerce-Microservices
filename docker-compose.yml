@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  kafka-broker:
+    image: confluentinc/cp-kafka:7.6.0
+    container_name: kafka-broker
+    ports:
+      - "9092:9092"
+    environment:
+      # KRaft Mode Specific Configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: 'broker,controller'
+      KAFKA_CONTROLLER_QUORUM_VOTERS: '1@kafka-broker:29093'
+      
+      # Listeners configuration
+      # CONTROLLER (29093): Internal controller traffic
+      # PLAINTEXT (29092): Internal docker network traffic (used by other containers)
+      # PLAINTEXT_HOST (9092): External host network traffic (used by services running on localhost)
+      KAFKA_LISTENERS: 'PLAINTEXT://0.0.0.0:29092,CONTROLLER://0.0.0.0:29093,PLAINTEXT_HOST://0.0.0.0:9092'
+      KAFKA_ADVERTISED_LISTENERS: 'PLAINTEXT://kafka-broker:29092,PLAINTEXT_HOST://localhost:9092'
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: 'CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT'
+      KAFKA_INTER_BROKER_LISTENER_NAME: 'PLAINTEXT'
+      KAFKA_CONTROLLER_LISTENER_NAMES: 'CONTROLLER'
+      
+      # Cluster Configuration
+      KAFKA_LOG_DIRS: '/var/lib/kafka/data'
+      # Generated using: kafka-storage.sh random-uuid
+      CLUSTER_ID: 'MkU3OEVBNTcwNTJENDM2Qk'
+      
+      # Development settings (Single-node cluster tuning)
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - ecommerce-network
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: kafka-ui
+    ports:
+      - "8090:8080" # Exposed on 8090 to avoid conflict with API-Gateway on 8080
+    environment:
+      KAFKA_CLUSTERS_0_NAME: 'local-kraft-cluster'
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: 'kafka-broker:29092'
+    depends_on:
+      - kafka-broker
+    networks:
+      - ecommerce-network
+
+volumes:
+  kafka_data:
+    driver: local
+
+networks:
+  ecommerce-network:
+    driver: bridge
