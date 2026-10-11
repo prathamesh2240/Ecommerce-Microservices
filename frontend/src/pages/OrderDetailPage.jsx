@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   FiCheckCircle,
@@ -21,6 +21,7 @@ export const OrderDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
+  const intervalRef = useRef(null);
 
   const fetchOrderDetails = async (isManualRefresh = false) => {
     try {
@@ -29,10 +30,13 @@ export const OrderDetailPage = () => {
       setError(null);
 
       // GET /api/orders/{orderNumber}
-      const response = await orderService.getOrderByNumber(orderNumber);
-      setOrder(response.data);
+      // orderService now returns OrderResponse directly (ApiResponse unwrapped internally)
+      const orderData = await orderService.getOrderByNumber(orderNumber);
+      setOrder(orderData);
+      return orderData; // return so callers can check status
     } catch (err) {
       setError(err.message || `Failed to fetch order details for ${orderNumber}`);
+      return null;
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -40,19 +44,34 @@ export const OrderDetailPage = () => {
   };
 
   useEffect(() => {
+    // Initial fetch
     fetchOrderDetails();
-    // Poll every 3 seconds if order status is still pending reservation or pending payment
-    const interval = setInterval(() => {
-      if (
-        order?.orderStatus === 'PENDING_RESERVATION' ||
-        order?.orderStatus === 'PENDING_PAYMENT'
-      ) {
-        fetchOrderDetails(true);
-      }
-    }, 3000);
 
-    return () => clearInterval(interval);
-  }, [orderNumber, order?.orderStatus]);
+    // Set up polling — use a ref to avoid re-creating the interval on every render.
+    // We check the latest order status via the API rather than from stale closure state.
+    const PENDING_STATUSES = new Set(['PENDING_RESERVATION', 'PENDING_PAYMENT']);
+
+    const poll = async () => {
+      try {
+        const latest = await orderService.getOrderByNumber(orderNumber);
+        setOrder(latest);
+        // Stop polling once order reaches a terminal state
+        if (latest && !PENDING_STATUSES.has(latest.orderStatus)) {
+          clearInterval(intervalRef.current);
+        }
+      } catch {
+        // Silent — polling errors don't need to surface
+      }
+    };
+
+    // Start polling every 3 seconds
+    intervalRef.current = setInterval(poll, 3000);
+
+    // Cleanup on unmount or orderNumber change
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [orderNumber]); // Only re-run if orderNumber changes, not on every order update
 
   if (loading) return <LoadingSpinner message={`Polling order ${orderNumber} state...`} />;
   if (error) return <ErrorState message={error} onRetry={() => fetchOrderDetails(false)} />;
@@ -128,6 +147,7 @@ export const OrderDetailPage = () => {
           onClick={() => fetchOrderDetails(true)}
           disabled={refreshing}
           className="inline-flex items-center space-x-2 px-3.5 py-1.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-xs font-bold transition shadow-sm"
+          aria-label="Refresh order status"
         >
           <FiRefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           <span>Refresh Saga Status</span>

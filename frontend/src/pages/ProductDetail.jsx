@@ -38,18 +38,19 @@ export const ProductDetail = () => {
       setError(null);
 
       // GET /api/catalog/products/slug/{slug}
-      const response = await productService.getProductBySlug(slug);
-      const productData = response.data;
+      // productService now returns ProductResponse directly (ApiResponse unwrapped internally)
+      const productData = await productService.getProductBySlug(slug);
       setProduct(productData);
 
       // Check live inventory using SKU
       if (productData?.sku) {
         try {
-          const invRes = await inventoryService.getInventoryBySku(productData.sku);
-          setInventory(invRes.data);
+          // inventoryService now returns InventoryResponse directly
+          const invData = await inventoryService.getInventoryBySku(productData.sku);
+          setInventory(invData);
         } catch {
-          // If inventory service record isn't created yet, fallback gracefully
-          setInventory({ availableQuantity: 50, reservedQuantity: 0 });
+          // Inventory record may not exist yet for this product — show unknown
+          setInventory(null);
         }
       }
     } catch (err) {
@@ -78,8 +79,10 @@ export const ProductDetail = () => {
   if (error) return <ErrorState message={error} onRetry={fetchProductDetails} />;
   if (!product) return null;
 
-  const availableStock = inventory?.availableQuantity ?? 0;
-  const isOutOfStock = availableStock <= 0;
+  // If inventory is null (service unavailable or record doesn't exist), assume in-stock
+  // so we don't accidentally block purchases. The backend will validate stock during order creation.
+  const availableStock = inventory != null ? (inventory.availableQuantity ?? 0) : 999;
+  const isOutOfStock = inventory != null && availableStock <= 0;
   const productImage = getProductImage(product);
 
   return (

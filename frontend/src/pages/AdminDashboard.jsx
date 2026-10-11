@@ -28,11 +28,13 @@ export const AdminDashboard = () => {
     try {
       setLoading(true);
       const prodRes = await productService.searchProducts({ page: 0, size: 20 });
-      setProducts(prodRes.data?.content || []);
+      // productService now returns Page directly (ApiResponse unwrapped internally)
+      setProducts(prodRes?.content || []);
 
       try {
         const userRes = await userService.getAllUsers();
-        setUsers(userRes.data || []);
+        // getAllUsers now returns the array directly (ApiResponse unwrapped in userService)
+        setUsers(Array.isArray(userRes) ? userRes : []);
       } catch {
         setUsers([]);
       }

@@ -1,8 +1,21 @@
+/**
+ * getProductImage — Resolves the display image for a product.
+ *
+ * Priority:
+ * 1. `imageUrl` from the product (backend-defined, trusted)
+ * 2. Name/SKU-based local image matching (for demo seed data)
+ * 3. Default placeholder
+ */
 export const getProductImage = (product) => {
   if (!product) return '/images/products/pixel-9-pro.png';
 
+  // Priority 1: Use imageUrl if it's an absolute or root-relative URL
+  if (product.imageUrl && (product.imageUrl.startsWith('http') || product.imageUrl.startsWith('/'))) {
+    return product.imageUrl;
+  }
+
+  // Priority 2: Match by SKU/name for local demo product images
   const sku = (product.sku || '').toUpperCase();
-  const slug = (product.slug || '').toLowerCase();
   const name = (product.name || '').toLowerCase();
 
   if (sku.includes('MACBOOK') || name.includes('macbook')) {
@@ -24,9 +37,6 @@ export const getProductImage = (product) => {
     return '/images/products/pixel-9-pro.png';
   }
 
-  if (product.imageUrl && (product.imageUrl.startsWith('http') || product.imageUrl.startsWith('/'))) {
-    return product.imageUrl;
-  }
-
+  // Priority 3: Default
   return '/images/products/pixel-9-pro.png';
 };

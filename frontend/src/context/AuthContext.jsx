@@ -10,6 +10,10 @@ export const AuthProvider = ({ children }) => {
     return saved ? JSON.parse(saved) : null;
   });
 
+  /**
+   * Decode a JWT payload without a library.
+   * Returns the parsed claims object, or null on failure.
+   */
   const parseJwt = (jwtToken) => {
     try {
       const base64Url = jwtToken.split('.')[1];
@@ -28,17 +32,23 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (email, password) => {
     const response = await authService.login(email, password);
-    // response is { accessToken, email, role }
+    // response: { accessToken, email, role }
     const { accessToken, role } = response;
-    
-    // Parse claims for userId
+
+    // Parse JWT claims for userId (and any other embedded fields)
     const claims = parseJwt(accessToken);
-    const userId = claims?.userId || null;
+    const userId = claims?.userId ?? null;
+    // Some JWT payloads may include firstName/lastName — extract if present
+    const firstName = claims?.firstName ?? null;
+    const lastName = claims?.lastName ?? null;
 
     const userData = {
       id: userId,
       email: response.email || email,
       role: role || 'ROLE_USER',
+      // Store name if available in token; will be refreshed from /me on profile load
+      firstName,
+      lastName,
     };
 
     localStorage.setItem('token', accessToken);
@@ -62,8 +72,13 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
-  const updateUserProfile = (updatedUser) => {
-    const newUserData = { ...user, ...updatedUser };
+  /**
+   * Merge partial profile data into the stored user object.
+   * Called after a successful profile fetch/update to keep the
+   * navbar and other UI in sync without re-login.
+   */
+  const updateUserProfile = (updatedFields) => {
+    const newUserData = { ...user, ...updatedFields };
     localStorage.setItem('user', JSON.stringify(newUserData));
     setUser(newUserData);
   };

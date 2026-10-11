@@ -18,8 +18,9 @@ export const OrderHistoryPage = () => {
       setLoading(true);
       setError(null);
       const cleanOrderNumber = orderNumberInput.trim();
-      const res = await orderService.getOrderByNumber(cleanOrderNumber);
-      if (res.data) {
+      // orderService.getOrderByNumber now returns OrderResponse directly
+      const orderData = await orderService.getOrderByNumber(cleanOrderNumber);
+      if (orderData?.orderNumber) {
         navigate(`/orders/${cleanOrderNumber}`);
       }
     } catch (err) {

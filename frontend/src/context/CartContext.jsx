@@ -1,96 +1,207 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import toast from 'react-hot-toast';
+
+import React, {
+    createContext,
+    useContext,
+    useState,
+    useEffect
+} from "react";
+
+import toast from "react-hot-toast";
 
 const CartContext = createContext(null);
 
 export const CartProvider = ({ children }) => {
-  const [cartItems, setCartItems] = useState(() => {
-    const saved = localStorage.getItem('cart');
-    return saved ? JSON.parse(saved) : [];
-  });
 
-  useEffect(() => {
-    localStorage.setItem('cart', JSON.stringify(cartItems));
-  }, [cartItems]);
+    const [cartItems, setCartItems] = useState(() => {
+        const saved = localStorage.getItem("cart");
 
-  const addToCart = (product, quantity = 1) => {
-    setCartItems((prevItems) => {
-      const existingIndex = prevItems.findIndex((item) => item.sku === product.sku);
-      if (existingIndex > -1) {
-        const updated = [...prevItems];
-        updated[existingIndex].quantity += quantity;
-        toast.success(`Updated ${product.name} quantity in cart (${updated[existingIndex].quantity})`);
-        return updated;
-      } else {
-        toast.success(`Added ${product.name} to cart`);
-        return [
-          ...prevItems,
-          {
-            id: product.id,
-            sku: product.sku,
-            name: product.name,
-            price: product.price,
-            currency: product.currency || 'USD',
-            imageUrl: product.imageUrl || product.thumbnailUrl,
-            brand: product.brand,
-            quantity: quantity,
-          },
-        ];
-      }
+        try {
+            return saved ? JSON.parse(saved) : [];
+        } catch (error) {
+            console.error("Invalid cart data:", error);
+            return [];
+        }
     });
-  };
 
-  const removeFromCart = (sku) => {
-    setCartItems((prev) => {
-      const item = prev.find((i) => i.sku === sku);
-      if (item) toast.info(`Removed ${item.name} from cart`);
-      return prev.filter((i) => i.sku !== sku);
-    });
-  };
+    // Save cart to localStorage
+    useEffect(() => {
+        localStorage.setItem(
+            "cart",
+            JSON.stringify(cartItems)
+        );
+    }, [cartItems]);
 
-  const updateQuantity = (sku, quantity) => {
-    if (quantity <= 0) {
-      removeFromCart(sku);
-      return;
-    }
-    setCartItems((prev) =>
-      prev.map((item) => (item.sku === sku ? { ...item, quantity } : item))
+
+    // ==========================================
+    // ADD TO CART
+    // ==========================================
+    const addToCart = (product, quantity = 1) => {
+
+        const existingItem = cartItems.find(
+            (item) => item.sku === product.sku
+        );
+
+        if (existingItem) {
+
+            const newQuantity =
+                existingItem.quantity + quantity;
+
+            setCartItems((prevItems) =>
+                prevItems.map((item) =>
+                    item.sku === product.sku
+                        ? {
+                            ...item,
+                            quantity: newQuantity
+                        }
+                        : item
+                )
+            );
+
+            toast.success(
+                `Updated ${product.name} quantity in cart (${newQuantity})`
+            );
+
+        } else {
+
+            const newItem = {
+                id: product.id,
+                sku: product.sku,
+                name: product.name,
+                price: product.price,
+                currency: product.currency || "USD",
+                imageUrl:
+                    product.imageUrl ||
+                    product.thumbnailUrl,
+                brand: product.brand,
+                quantity: quantity
+            };
+
+            setCartItems((prevItems) => [
+                ...prevItems,
+                newItem
+            ]);
+
+            toast.success(
+                `Added ${product.name} to cart`
+            );
+        }
+    };
+
+
+    // ==========================================
+    // REMOVE FROM CART
+    // ==========================================
+    const removeFromCart = (sku) => {
+
+        const item = cartItems.find(
+            (item) => item.sku === sku
+        );
+
+        setCartItems((prevItems) =>
+            prevItems.filter(
+                (item) => item.sku !== sku
+            )
+        );
+
+        if (item) {
+            toast.success(
+                `Removed ${item.name} from cart`
+            );
+        }
+    };
+
+
+    // ==========================================
+    // UPDATE QUANTITY
+    // ==========================================
+    const updateQuantity = (sku, quantity) => {
+
+        if (quantity <= 0) {
+            removeFromCart(sku);
+            return;
+        }
+
+        setCartItems((prevItems) =>
+            prevItems.map((item) =>
+                item.sku === sku
+                    ? {
+                        ...item,
+                        quantity: quantity
+                    }
+                    : item
+            )
+        );
+    };
+
+
+    // ==========================================
+    // CLEAR CART
+    // ==========================================
+    const clearCart = () => {
+
+        setCartItems([]);
+
+        localStorage.removeItem("cart");
+
+        toast.success("Cart cleared");
+    };
+
+
+    // ==========================================
+    // CART COUNT
+    // ==========================================
+    const cartCount = cartItems.reduce(
+        (acc, item) =>
+            acc + Number(item.quantity),
+        0
     );
-  };
 
-  const clearCart = () => {
-    setCartItems([]);
-    localStorage.removeItem('cart');
-  };
 
-  const cartCount = cartItems.reduce((acc, item) => acc + item.quantity, 0);
+    // ==========================================
+    // CART TOTAL
+    // ==========================================
+    const cartTotal = cartItems.reduce(
+        (acc, item) =>
+            acc +
+            Number(item.price) *
+            Number(item.quantity),
+        0
+    );
 
-  const cartTotal = cartItems.reduce(
-    (acc, item) => acc + Number(item.price) * item.quantity,
-    0
-  );
 
-  return (
-    <CartContext.Provider
-      value={{
-        cartItems,
-        addToCart,
-        removeFromCart,
-        updateQuantity,
-        clearCart,
-        cartCount,
-        cartTotal,
-      }}
-    >
-      {children}
-    </CartContext.Provider>
-  );
+    // ==========================================
+    // CONTEXT PROVIDER
+    // ==========================================
+    return (
+        <CartContext.Provider
+            value={{
+                cartItems,
+                addToCart,
+                removeFromCart,
+                updateQuantity,
+                clearCart,
+                cartCount,
+                cartTotal
+            }}
+        >
+            {children}
+        </CartContext.Provider>
+    );
 };
 
+
+// ==============================================
+// CUSTOM HOOK
+// ==============================================
 export const useCart = () => {
-  const context = useContext(CartContext);
-  if (!context) {
-    throw new Error('useCart must be used within a CartProvider');
-  }
-  return context;
+
+    const context = useContext(CartContext);
+
+    if (!context) {
+        throw new Error(
+            "useCart must be used within a CartProvider"
+        );
+    }
+
+    return context;
 };

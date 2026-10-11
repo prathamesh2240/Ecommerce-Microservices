@@ -16,8 +16,8 @@ export const Home = () => {
       setLoading(true);
       setError(null);
       const response = await productService.searchProducts({ page: 0, size: 8, sort: 'createdAt,desc' });
-      // response structure is ApiResponse<Page<ProductResponse>>
-      const content = response.data?.content || [];
+      // productService now returns the Page object directly (ApiResponse unwrapped internally)
+      const content = response?.content || [];
       setProducts(content);
     } catch (err) {
       setError(err.message || 'Failed to load products');

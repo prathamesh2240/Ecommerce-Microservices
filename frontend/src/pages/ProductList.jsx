@@ -42,7 +42,8 @@ export const ProductList = () => {
       if (brandParam) params.brand = brandParam;
 
       const response = await productService.searchProducts(params);
-      const pageData = response.data || {};
+      // productService now returns the Page object directly (ApiResponse unwrapped internally)
+      const pageData = response || {};
       setProducts(pageData.content || []);
       setTotalPages(pageData.totalPages || 1);
       setTotalElements(pageData.totalElements || 0);

@@ -54,7 +54,7 @@ export const ProductCard = ({ product }) => {
       </div>
 
       {/* Footer / Price & Actions */}
-      <div className="p-6 pt-0 mt-auto flex items-center justify-between border-t border-gray-50 pt-4">
+      <div className="px-6 pb-6 mt-auto flex items-center justify-between border-t border-gray-50 pt-4">
         <div>
           <span className="text-2xl font-black text-gray-900">{priceFormatted}</span>
         </div>
@@ -64,6 +64,7 @@ export const ProductCard = ({ product }) => {
             to={detailLink}
             className="p-2.5 rounded-xl text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 transition"
             title="View Details"
+            aria-label={`View details for ${product.name}`}
           >
             <FiEye className="w-5 h-5" />
           </Link>
@@ -71,7 +72,7 @@ export const ProductCard = ({ product }) => {
             onClick={() => addToCart(product, 1)}
             disabled={product.status === 'OUT_OF_STOCK' || product.status === 'INACTIVE'}
             className="flex items-center space-x-1.5 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-100 transition active:scale-95"
-            title="Add to Cart"
+            aria-label={`Add ${product.name} to cart`}
           >
             <FiShoppingCart className="w-4 h-4" />
             <span>Add</span>

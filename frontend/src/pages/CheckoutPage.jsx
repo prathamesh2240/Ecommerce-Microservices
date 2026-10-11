@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import {
   FiCheckCircle,
@@ -9,10 +9,16 @@ import {
   FiMapPin,
   FiCreditCard,
   FiAlertCircle,
+  FiPlus,
+  FiCheck,
+  FiHome,
+  FiBriefcase
 } from 'react-icons/fi';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { orderService } from '../services/orderService';
+import { addressService } from '../services/addressService';
+import { AddressModal } from '../components/address/AddressModal';
 import toast from 'react-hot-toast';
 
 export const CheckoutPage = () => {
@@ -23,15 +29,104 @@ export const CheckoutPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Form Fields
-  const [shippingInfo, setShippingInfo] = useState({
-    fullName: user?.email ? user.email.split('@')[0] : 'John Doe',
-    email: user?.email || 'customer@example.com',
-    address: '123 Tech Park Way',
-    city: 'San Francisco',
-    postalCode: '94105',
-    country: 'United States',
-  });
+  // Address Selection State
+  const [addresses, setAddresses] = useState([]);
+  const [loadingAddresses, setLoadingAddresses] = useState(true);
+  const [selectedAddressId, setSelectedAddressId] = useState(null);
+
+  // Modal State for adding address during checkout
+  const [isAddressModalOpen, setIsAddressModalOpen] = useState(false);
+  const [isSavingAddress, setIsSavingAddress] = useState(false);
+
+  const fetchAddresses = useCallback(async (autoSelectNewId = null) => {
+    try {
+      setLoadingAddresses(true);
+      const data = await addressService.getMyAddresses();
+      const addrList = Array.isArray(data) ? data : [];
+      setAddresses(addrList);
+
+      if (autoSelectNewId) {
+        setSelectedAddressId(autoSelectNewId);
+      } else if (addrList.length > 0) {
+        // Auto-select default or first address if nothing currently selected or valid
+        setSelectedAddressId((prevId) => {
+          const currentExists = addrList.some((a) => a.id === prevId);
+          if (currentExists) return prevId;
+          const defaultAddr = addrList.find((a) => a.isDefault);
+          return defaultAddr ? defaultAddr.id : addrList[0].id;
+        });
+      } else {
+        setSelectedAddressId(null);
+      }
+    } catch {
+      // Non-blocking error handling
+      setAddresses([]);
+    } finally {
+      setLoadingAddresses(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAddresses();
+  }, [fetchAddresses]);
+
+  const handleAddNewAddress = async (formData) => {
+    try {
+      setIsSavingAddress(true);
+      const newAddress = await addressService.createAddress(formData);
+      toast.success('Address added and selected!');
+      setIsAddressModalOpen(false);
+      await fetchAddresses(newAddress?.id);
+    } catch (err) {
+      throw err;
+    } finally {
+      setIsSavingAddress(false);
+    }
+  };
+
+  const handlePlaceOrder = async (e) => {
+    e.preventDefault();
+
+    if (addresses.length === 0 || !selectedAddressId) {
+      const msg = 'Please select or add a delivery address to proceed.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Customer ID from authenticated user context
+      const customerId = user?.id ? Number(user.id) : 1;
+
+      // Construct Order Payload based on backend OrderCreateRequest DTO
+      const orderPayload = {
+        customerId: customerId,
+        items: cartItems.map((item) => ({
+          sku: item.sku,
+          price: Number(item.price),
+          quantity: item.quantity,
+        })),
+      };
+
+      // Order Service initiates Saga
+      const createdOrder = await orderService.createOrder(orderPayload);
+
+      toast.success(`Order ${createdOrder?.orderNumber} placed successfully!`);
+      clearCart();
+
+      // Navigate to live Saga order tracking page
+      navigate(`/orders/${createdOrder?.orderNumber}`);
+    } catch (err) {
+      const errMessage = err.message || 'Failed to submit order. Please try again.';
+      setError(errMessage);
+      toast.error(errMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   if (cartItems.length === 0) {
     return (
@@ -49,57 +144,18 @@ export const CheckoutPage = () => {
     );
   }
 
-  const handleInputChange = (e) => {
-    setShippingInfo({ ...shippingInfo, [e.target.name]: e.target.value });
-  };
-
-  const handlePlaceOrder = async (e) => {
-    e.preventDefault();
-
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Customer ID fallback: use logged in user's ID or 1
-      const customerId = user?.id ? Number(user.id) : 1;
-
-      // Construct Order Payload based on backend OrderCreateRequest DTO
-      const orderPayload = {
-        customerId: customerId,
-        items: cartItems.map((item) => ({
-          sku: item.sku,
-          price: Number(item.price),
-          quantity: item.quantity,
-        })),
-      };
-
-      // Call Order Service via API Gateway (POST /api/orders)
-      const response = await orderService.createOrder(orderPayload);
-      const createdOrder = response.data;
-
-      toast.success(`Order ${createdOrder.orderNumber} placed successfully!`);
-      clearCart();
-
-      // Navigate directly to Order Details page to observe Saga execution live
-      navigate(`/orders/${createdOrder.orderNumber}`);
-    } catch (err) {
-      const errMessage = err.message || 'Failed to submit order. Please try again.';
-      setError(errMessage);
-      toast.error(errMessage);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const selectedAddress = addresses.find((a) => a.id === selectedAddressId);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 pb-16">
+      {/* Header */}
       <div className="flex items-center space-x-4">
         <Link to="/cart" className="p-2.5 bg-white rounded-xl border border-gray-100 text-gray-600 hover:text-indigo-600 transition">
           <FiArrowLeft className="w-5 h-5" />
         </Link>
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-gray-900">Checkout</h1>
-          <p className="text-sm text-gray-500">Complete your shipping information and finalize your order</p>
+          <p className="text-sm text-gray-500">Select delivery address and finalize your order</p>
         </div>
       </div>
 
@@ -111,9 +167,9 @@ export const CheckoutPage = () => {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Left Column: Shipping & Customer Form */}
+        {/* Left Column: Checkout Sections */}
         <form onSubmit={handlePlaceOrder} className="lg:col-span-2 space-y-6">
-          {/* Section 1: Customer Details */}
+          {/* Section 1: Customer Account Info */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
             <div className="flex items-center space-x-2 text-indigo-600 font-bold border-b border-gray-100 pb-3">
               <FiUser className="w-5 h-5" />
@@ -122,87 +178,123 @@ export const CheckoutPage = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  name="fullName"
-                  required
-                  value={shippingInfo.fullName}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <span className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Account Name
+                </span>
+                <p className="text-sm font-bold text-gray-800">
+                  {user?.firstName
+                    ? `${user.firstName} ${user.lastName ?? ''}`.trim()
+                    : user?.email?.split('@')[0] ?? 'Apex Customer'}
+                </p>
               </div>
-
               <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Email Address</label>
-                <input
-                  type="email"
-                  name="email"
-                  required
-                  value={shippingInfo.email}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+                <span className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Email Address
+                </span>
+                <p className="text-sm font-bold text-gray-800">{user?.email}</p>
               </div>
             </div>
           </div>
 
-          {/* Section 2: Delivery Address */}
+          {/* Section 2: Delivery Address Selection */}
           <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-sm space-y-4">
-            <div className="flex items-center space-x-2 text-indigo-600 font-bold border-b border-gray-100 pb-3">
-              <FiMapPin className="w-5 h-5" />
-              <span>2. Delivery Address</span>
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center space-x-2 text-indigo-600 font-bold">
+                <FiMapPin className="w-5 h-5" />
+                <span>2. Delivery Address</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsAddressModalOpen(true)}
+                className="flex items-center gap-1 text-xs font-semibold text-indigo-600 hover:text-indigo-800 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl transition"
+              >
+                <FiPlus className="w-3.5 h-3.5" />
+                <span>Add New Address</span>
+              </button>
             </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-500 mb-1">Street Address</label>
-                <input
-                  type="text"
-                  name="address"
-                  required
-                  value={shippingInfo.address}
-                  onChange={handleInputChange}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                />
+            {/* Address Selection List */}
+            {loadingAddresses ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-pulse">
+                {[1, 2].map((i) => (
+                  <div key={i} className="h-32 bg-gray-50 border border-gray-100 rounded-2xl p-4" />
+                ))}
               </div>
+            ) : addresses.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {addresses.map((addr) => {
+                  const isSelected = selectedAddressId === addr.id;
+                  return (
+                    <label
+                      key={addr.id}
+                      className={`relative flex flex-col justify-between p-4 rounded-2xl border cursor-pointer transition-all duration-150 ${
+                        isSelected
+                          ? 'border-indigo-600 bg-indigo-50/50 shadow-sm ring-2 ring-indigo-500/20'
+                          : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="radio"
+                              name="selectedAddress"
+                              value={addr.id}
+                              checked={isSelected}
+                              onChange={() => setSelectedAddressId(addr.id)}
+                              className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                            />
+                            <span className="text-xs font-bold text-gray-700 uppercase tracking-wider flex items-center gap-1">
+                              {addr.addressType === 'WORK' ? <FiBriefcase className="w-3 h-3" /> : <FiHome className="w-3 h-3" />}
+                              {addr.addressType}
+                            </span>
+                          </div>
+                          {addr.isDefault && (
+                            <span className="text-[10px] font-bold bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full">
+                              Default
+                            </span>
+                          )}
+                        </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">City</label>
-                  <input
-                    type="text"
-                    name="city"
-                    required
-                    value={shippingInfo.city}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Postal Code</label>
-                  <input
-                    type="text"
-                    name="postalCode"
-                    required
-                    value={shippingInfo.postalCode}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-gray-500 mb-1">Country</label>
-                  <input
-                    type="text"
-                    name="country"
-                    required
-                    value={shippingInfo.country}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+                        <p className="text-sm font-bold text-gray-900">{addr.fullName}</p>
+                        <p className="text-xs text-gray-600 mt-0.5 line-clamp-2">
+                          {addr.addressLine1}
+                          {addr.addressLine2 && `, ${addr.addressLine2}`}
+                        </p>
+                        <p className="text-xs text-gray-700 font-medium mt-1">
+                          {addr.city}, {addr.state} — {addr.pincode}
+                        </p>
+                        <p className="text-xs text-gray-400 mt-1">📱 +91 {addr.phoneNumber}</p>
+                      </div>
+
+                      {isSelected && (
+                        <div className="mt-3 pt-2 border-t border-indigo-100 flex items-center gap-1 text-[11px] font-bold text-indigo-600">
+                          <FiCheck className="w-3.5 h-3.5" />
+                          <span>Delivering to this address</span>
+                        </div>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
-            </div>
+            ) : (
+              /* No Saved Addresses */
+              <div className="text-center py-6 border border-dashed border-gray-200 rounded-2xl p-6 space-y-3">
+                <FiMapPin className="w-8 h-8 text-gray-300 mx-auto" />
+                <p className="text-sm font-semibold text-gray-700">No delivery address found</p>
+                <p className="text-xs text-gray-400 max-w-sm mx-auto">
+                  Please add a delivery address to complete your order checkout.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setIsAddressModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white text-xs font-semibold rounded-xl hover:bg-indigo-700 transition shadow-sm"
+                >
+                  <FiPlus className="w-4 h-4" />
+                  <span>Add Delivery Address</span>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Section 3: Payment Method */}
@@ -226,7 +318,7 @@ export const CheckoutPage = () => {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || addresses.length === 0}
             className="w-full py-4 bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 disabled:opacity-50 text-white font-bold rounded-2xl shadow-xl shadow-indigo-200 transition flex items-center justify-center space-x-2 text-base"
           >
             {loading ? (
@@ -240,7 +332,7 @@ export const CheckoutPage = () => {
           </button>
         </form>
 
-        {/* Right Column: Order Items Summary */}
+        {/* Right Column: Order Summary */}
         <div className="bg-white p-6 rounded-3xl border border-gray-100 shadow-xl space-y-6 h-fit">
           <h2 className="text-xl font-bold text-gray-900 border-b border-gray-100 pb-4">Order Items</h2>
 
@@ -267,6 +359,19 @@ export const CheckoutPage = () => {
             ))}
           </div>
 
+          {/* Delivery Target Preview */}
+          {selectedAddress && (
+            <div className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs space-y-1">
+              <span className="text-gray-400 uppercase tracking-wider font-bold text-[10px]">
+                Delivering to
+              </span>
+              <p className="font-bold text-gray-800 truncate">{selectedAddress.fullName}</p>
+              <p className="text-gray-500 truncate">
+                {selectedAddress.addressLine1}, {selectedAddress.city} — {selectedAddress.pincode}
+              </p>
+            </div>
+          )}
+
           <div className="pt-4 border-t border-gray-100 space-y-2 text-sm">
             <div className="flex justify-between text-gray-600">
               <span>Subtotal</span>
@@ -283,6 +388,15 @@ export const CheckoutPage = () => {
           </div>
         </div>
       </div>
+
+      {/* Add Address Modal in Checkout */}
+      <AddressModal
+        isOpen={isAddressModalOpen}
+        onClose={() => setIsAddressModalOpen(false)}
+        onSubmit={handleAddNewAddress}
+        isSaving={isSavingAddress}
+        title="Add Delivery Address"
+      />
     </div>
   );
 };

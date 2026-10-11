@@ -32,7 +32,9 @@ api.interceptors.response.use(
     const errorMessages = {
       400: backendMessage || 'Invalid request. Please check your input.',
       401: 'Your session has expired. Please login again.',
-      403: 'You do not have permission to perform this action.',
+      // 403: use the actual backend message — it contains meaningful context
+      // (e.g. "Access denied: You can only view your own profile")
+      403: backendMessage || 'You do not have permission to perform this action.',
       404: backendMessage || 'Resource not found.',
       409: backendMessage || 'This resource already exists.',
       500: 'Something went wrong on our end. Please try again.',
