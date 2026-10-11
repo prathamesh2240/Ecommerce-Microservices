@@ -10,11 +10,11 @@ export const inventoryService = {
   /**
    * GET /api/inventory/items/sku/{sku}
    * @param {string} sku
-   * @returns {InventoryResponse} — { sku, availableQuantity, reservedQuantity }
+   * @returns {Promise<Array>} — List of warehouse inventory items
    */
   getInventoryBySku: async (sku) => {
     const response = await api.get(`/api/inventory/items/sku/${sku}`);
-    // response.data = ApiResponse<InventoryResponse>; unwrap the inner .data
-    return response.data?.data ?? response.data;
+    const data = response.data?.data ?? response.data;
+    return Array.isArray(data) ? data : data ? [data] : [];
   },
 };

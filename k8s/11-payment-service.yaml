@@ -7,6 +7,8 @@ metadata:
     app: payment-service
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: payment-service
@@ -66,7 +68,7 @@ spec:
                   name: ecommerce-config
                   key: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx192m -Xms64m -XX:+UseG1GC -Deureka.client.serviceUrl.defaultZone=http://eureka-server:8761/eureka/ -Dspring.kafka.bootstrap-servers=kafka-broker:29092"
+              value: "-Xmx384m -Xms128m -XX:+UseSerialGC -Deureka.client.serviceUrl.defaultZone=http://eureka-server:8761/eureka/ -Dspring.kafka.bootstrap-servers=kafka-broker:29092"
           resources:
             requests:
               memory: "256Mi"
@@ -79,7 +81,7 @@ spec:
               port: 8085
             initialDelaySeconds: 20
             periodSeconds: 10
-            failureThreshold: 30
+            failureThreshold: 60
             timeoutSeconds: 5
           readinessProbe:
             httpGet:

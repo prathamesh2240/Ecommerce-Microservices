@@ -7,6 +7,8 @@ metadata:
     app: eureka-server
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: eureka-server
@@ -26,7 +28,7 @@ spec:
             - name: EUREKA_INSTANCE_HOSTNAME
               value: "eureka-server"
             - name: JAVA_TOOL_OPTIONS
-              value: "-Xmx192m -Xms64m -XX:+UseG1GC"
+              value: "-Xmx384m -Xms128m -XX:+UseSerialGC"
           resources:
             requests:
               memory: "256Mi"
@@ -39,7 +41,7 @@ spec:
               port: 8761
             initialDelaySeconds: 20
             periodSeconds: 10
-            failureThreshold: 30
+            failureThreshold: 60
             timeoutSeconds: 5
           readinessProbe:
             httpGet:
